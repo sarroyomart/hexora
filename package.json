@@ -1,0 +1,30 @@
+{
+  "name": "hexora",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 4731 --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview --port 4731 --host 0.0.0.0",
+    "check": "tsx src/game/selfcheck.ts"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "lucide-react": "^1.80.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.90.0",
+    "tsx": "^4.20.6",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  }
+}
