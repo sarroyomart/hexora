@@ -2,12 +2,14 @@ import { type ReactNode } from 'react'
 import {
   CalendarDays,
   CircleHelp,
+  Crown,
   Droplets,
   Flame,
   Flower2,
   Infinity as InfinityIcon,
   Moon,
   Mountain,
+  Palette,
   PawPrint,
   RotateCcw,
   Sparkles,
@@ -18,9 +20,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { assessBiodiversity, currentBiome, seasonName, upcomingBiomes } from '../game/engine'
+import { biomePaint } from '../game/skins'
 import { visibleStreak } from '../game/storage'
 import { todayString } from '../game/seededRandom'
-import { BIOME_INFO, BIOMES, DAILY_LENGTH, type Biome, type GameState, type Settings, type Stats, type Tile } from '../game/types'
+import { BIOME_INFO, BIOMES, DAILY_LENGTH, type Biome, type GameState, type Settings, type SkinName, type Stats, type Tile } from '../game/types'
 
 const ICONS: Record<Biome, LucideIcon> = {
   water: Droplets,
@@ -40,6 +43,8 @@ interface Props {
   game: GameState
   stats: Stats
   settings: Settings
+  skin: SkinName
+  zenPass: boolean
   status: string
   wildcardOn: boolean
   target: Tile | null
@@ -54,6 +59,7 @@ interface Props {
   onWildcard: (action: { type: 'clear'; q: number; r: number } | { type: 'transform'; q: number; r: number; biome: Biome }) => void
   onCancelTarget: () => void
   onDismissHint: () => void
+  onZenPass: () => void
 }
 
 export function HUD(props: Props) {
@@ -61,6 +67,8 @@ export function HUD(props: Props) {
     game,
     stats,
     settings,
+    skin,
+    zenPass,
     status,
     wildcardOn,
     target,
@@ -75,6 +83,7 @@ export function HUD(props: Props) {
     onWildcard,
     onCancelTarget,
     onDismissHint,
+    onZenPass,
   } = props
   const current = currentBiome(game)
   const upcoming = upcomingBiomes(game)
@@ -86,7 +95,7 @@ export function HUD(props: Props) {
 
   return (
     <>
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5">
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-2 ps-[max(0.75rem,env(safe-area-inset-left))] pe-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-start justify-between gap-3">
           <div className="glass pointer-events-auto flex items-center gap-3 rounded-2xl px-3 py-2">
             <span className="hex-clip grid h-9 w-9 place-items-center bg-[#1f7a45] text-[#f6e7b4]" aria-hidden>
@@ -100,7 +109,7 @@ export function HUD(props: Props) {
               </p>
             </div>
           </div>
-          <div className="pointer-events-auto flex flex-wrap justify-end gap-1.5">
+          <div className="pointer-events-auto flex shrink-0 justify-end gap-1">
             <IconButton label="Quick rules" onClick={onRules}>
               <CircleHelp size={18} />
             </IconButton>
@@ -109,6 +118,9 @@ export function HUD(props: Props) {
             </IconButton>
             <IconButton label={settings.theme === 'day' ? 'Night mode' : 'Day mode'} onClick={onToggleTheme}>
               {settings.theme === 'day' ? <Moon size={18} /> : <Sun size={18} />}
+            </IconButton>
+            <IconButton label={zenPass ? 'Zen Pass themes' : 'Hexora Zen Pass'} onClick={onZenPass}>
+              {zenPass ? <Palette size={18} /> : <Crown size={18} />}
             </IconButton>
           </div>
         </div>
@@ -155,7 +167,7 @@ export function HUD(props: Props) {
         </div>
       </header>
 
-      <div className="pointer-events-none absolute inset-x-0 top-36 z-30 flex flex-col items-center gap-2 px-4 sm:top-32">
+      <div className="pointer-events-none absolute inset-x-0 z-30 flex flex-col items-center gap-2 px-4 top-[calc(env(safe-area-inset-top)+9.5rem)]">
         {toasts.map((toast) => (
           <div
             key={toast.id}
@@ -167,7 +179,7 @@ export function HUD(props: Props) {
         ))}
       </div>
 
-      <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-20 ps-[max(0.75rem,env(safe-area-inset-left))] pe-[max(0.75rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {target && (
           <div className="glass pointer-events-auto mx-auto mb-2 w-full max-w-xl rounded-2xl p-3">
             {target.kind === 'core' ? (
@@ -196,7 +208,7 @@ export function HUD(props: Props) {
                       aria-label={`Transform into ${BIOME_INFO[biome].name}`}
                       onClick={() => onWildcard({ type: 'transform', q: target.q, r: target.r, biome })}
                     >
-                      <BiomeToken biome={biome} size={42} />
+                      <BiomeToken biome={biome} skin={skin} size={42} />
                     </button>
                   ))}
                 </div>
@@ -232,7 +244,7 @@ export function HUD(props: Props) {
             <div className="flex flex-col items-center gap-1">
               {current ? (
                 <>
-                  <BiomeToken biome={current} size={84} />
+                  <BiomeToken biome={current} skin={skin} size={84} />
                   <span className="text-[10px] tracking-[0.18em] text-[var(--muted)] uppercase">{BIOME_INFO[current].epithet}</span>
                 </>
               ) : (
@@ -244,7 +256,7 @@ export function HUD(props: Props) {
             <div className="flex items-end gap-2">
               {upcoming.map((biome, index) => (
                 <div key={`${biome}-${index}`} className="flex flex-col items-center gap-1 opacity-80">
-                  <BiomeToken biome={biome} size={index === 0 ? 52 : 40} />
+                  <BiomeToken biome={biome} skin={skin} size={index === 0 ? 52 : 40} />
                   <span className="text-[10px] tracking-[0.14em] text-[var(--muted)] uppercase">{index === 0 ? 'Next' : ''}</span>
                 </div>
               ))}
@@ -280,15 +292,15 @@ export function HUD(props: Props) {
   )
 }
 
-function BiomeToken({ biome, size }: { biome: Biome; size: number }) {
-  const info = BIOME_INFO[biome]
+function BiomeToken({ biome, skin, size }: { biome: Biome; skin: SkinName; size: number }) {
+  const paint = biomePaint(skin, biome)
   const Icon = ICONS[biome]
   return (
     <span
       className="hex-clip grid place-items-center shadow-sm"
-      style={{ width: size, height: size, background: `linear-gradient(180deg, ${info.face[0]}, ${info.face[1]})` }}
+      style={{ width: size, height: size, background: `linear-gradient(180deg, ${paint.face[0]}, ${paint.face[1]})` }}
     >
-      <Icon color={info.ink} size={Math.round(size * 0.38)} strokeWidth={1.75} aria-hidden />
+      <Icon color={paint.ink} size={Math.round(size * 0.38)} strokeWidth={1.75} aria-hidden />
     </span>
   )
 }
@@ -297,7 +309,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   return (
     <button
       type="button"
-      className="glass grid h-10 w-10 place-items-center rounded-full text-[var(--ink)]"
+      className="glass grid h-9 w-9 place-items-center rounded-full text-[var(--ink)] sm:h-10 sm:w-10"
       aria-label={label}
       onClick={onClick}
     >

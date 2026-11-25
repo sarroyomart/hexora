@@ -241,3 +241,14 @@ class HexoraAudio {
 }
 
 export const audio = new HexoraAudio()
+
+function listenForUnlock(): void {
+  if (typeof window === 'undefined') return
+  const resume = () => {
+    audio.unlock()
+  }
+  window.addEventListener('pointerdown', resume, { capture: true, passive: true })
+  window.addEventListener('touchstart', resume, { capture: true, passive: true })
+}
+
+listenForUnlock()

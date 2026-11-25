@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { PlacementEffects } from '../game/engine'
 import { previewPlacement } from '../game/engine'
+import { hapticLight } from '../game/haptics'
 import { HEX_SIZE, hexKey, hexToPixel, pixelToHex } from '../game/hexMath'
 import { drawBackground, drawWorld, type Floater, type Particle } from '../game/render'
-import type { GameState, ThemeName } from '../game/types'
+import type { GameState, SkinName, ThemeName } from '../game/types'
 
 interface Spring {
   scale: number
@@ -14,6 +15,7 @@ interface Spring {
 interface Props {
   game: GameState
   theme: ThemeName
+  skin: SkinName
   season: number
   wildcard: boolean
   selectedKey: string | null
@@ -27,6 +29,7 @@ interface Props {
 export function GameCanvas({
   game,
   theme,
+  skin,
   season,
   wildcard,
   selectedKey,
@@ -37,10 +40,10 @@ export function GameCanvas({
   onSelect,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const propsRef = useRef({ game, theme, season, wildcard, selectedKey, inputLocked, onPlace, onSelect })
+  const propsRef = useRef({ game, theme, skin, season, wildcard, selectedKey, inputLocked, onPlace, onSelect })
   useLayoutEffect(() => {
-    propsRef.current = { game, theme, season, wildcard, selectedKey, inputLocked, onPlace, onSelect }
-  }, [game, theme, season, wildcard, selectedKey, inputLocked, onPlace, onSelect])
+    propsRef.current = { game, theme, skin, season, wildcard, selectedKey, inputLocked, onPlace, onSelect }
+  }, [game, theme, skin, season, wildcard, selectedKey, inputLocked, onPlace, onSelect])
   const seenPulse = useRef(0)
   const fx = useRef({
     particles: [] as Particle[],
@@ -85,8 +88,10 @@ export function GameCanvas({
     let shownSeason = propsRef.current.season
     let fitted = false
     const pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>()
+    const tapSlop = 10
     let moved = false
-    let pinch: { dist: number; zoom: number } | null = null
+    let hoverKey = ''
+    let pinch: { dist: number; zoom: number; worldX: number; worldY: number } | null = null
     let running = true
     let last = performance.now()
     let raf = 0
@@ -123,62 +128,86 @@ export function GameCanvas({
 
     const setHover = (x: number, y: number) => {
       const world = screenToWorld(x, y)
-      hover = pixelToHex(world.x, world.y)
+      const next = pixelToHex(world.x, world.y)
+      hover = next
+      const key = `${next.q},${next.r}`
+      if (key === hoverKey) return
+      hoverKey = key
+      const current = propsRef.current
+      if (current.inputLocked || moved || pinch) return
+      if (current.wildcard) {
+        const tile = current.game.tiles.find((item) => item.q === next.q && item.r === next.r)
+        if (tile && tile.kind !== 'core') hapticLight()
+        return
+      }
+      if (previewPlacement(current.game, next.q, next.r).valid) hapticLight()
     }
 
     const onDown = (event: PointerEvent) => {
       if (propsRef.current.inputLocked) return
       canvas.setPointerCapture(event.pointerId)
       const point = localPoint(event)
-      setHover(point.x, point.y)
       pointers.set(event.pointerId, { ...point, sx: point.x, sy: point.y })
-      if (pointers.size === 2) {
-        const [a, b] = [...pointers.values()]
-        pinch = { dist: Math.hypot((a?.x ?? 0) - (b?.x ?? 0), (a?.y ?? 0) - (b?.y ?? 0)), zoom: cam.zoom }
-        moved = true
-      }
-    }
-
-    const onMove = (event: PointerEvent) => {
-      const point = localPoint(event)
-      setHover(point.x, point.y)
-      const previous = pointers.get(event.pointerId)
-      if (!previous || propsRef.current.inputLocked) return
-      pointers.set(event.pointerId, { ...previous, x: point.x, y: point.y })
-      if (pointers.size >= 2 && pinch) {
+      if (pointers.size >= 2) {
         const [a, b] = [...pointers.values()]
         const dist = Math.hypot((a?.x ?? 0) - (b?.x ?? 0), (a?.y ?? 0) - (b?.y ?? 0))
         const midX = ((a?.x ?? 0) + (b?.x ?? 0)) / 2
         const midY = ((a?.y ?? 0) + (b?.y ?? 0)) / 2
-        zoomAt(midX, midY, pinch.zoom * (dist / Math.max(1, pinch.dist)))
-        canvas.style.cursor = 'grabbing'
-        return
+        const anchor = screenToWorld(midX, midY)
+        pinch = { dist: Math.max(1, dist), zoom: cam.zoom, worldX: anchor.x, worldY: anchor.y }
+        moved = true
       }
-      if (Math.hypot(point.x - previous.sx, point.y - previous.sy) > 8) moved = true
-      if (moved) {
-        cam.x += point.x - previous.x
-        cam.y += point.y - previous.y
-        canvas.style.cursor = 'grabbing'
-      }
+      setHover(point.x, point.y)
     }
 
-    const onUp = (event: PointerEvent) => {
+    const onMove = (event: PointerEvent) => {
+      const point = localPoint(event)
+      const previous = pointers.get(event.pointerId)
+      if (previous && !propsRef.current.inputLocked) {
+        pointers.set(event.pointerId, { ...previous, x: point.x, y: point.y })
+        if (pointers.size >= 2 && pinch) {
+          const [a, b] = [...pointers.values()]
+          const dist = Math.hypot((a?.x ?? 0) - (b?.x ?? 0), (a?.y ?? 0) - (b?.y ?? 0))
+          const midX = ((a?.x ?? 0) + (b?.x ?? 0)) / 2
+          const midY = ((a?.y ?? 0) + (b?.y ?? 0)) / 2
+          cam.zoom = Math.min(2.35, Math.max(0.42, pinch.zoom * (dist / pinch.dist)))
+          cam.x = midX - width / 2 - pinch.worldX * cam.zoom
+          cam.y = midY - height / 2 - pinch.worldY * cam.zoom
+          canvas.style.cursor = 'grabbing'
+          moved = true
+          return
+        }
+        if (Math.hypot(point.x - previous.sx, point.y - previous.sy) > tapSlop) moved = true
+        if (moved) {
+          cam.x += point.x - previous.x
+          cam.y += point.y - previous.y
+          canvas.style.cursor = 'grabbing'
+        }
+      }
+      setHover(point.x, point.y)
+    }
+
+    const finishPointer = (event: PointerEvent, place: boolean) => {
       const point = localPoint(event)
       pointers.delete(event.pointerId)
       if (pointers.size < 2) pinch = null
       if (pointers.size === 0) {
-        if (!moved && !propsRef.current.inputLocked) {
+        if (place && !moved && !propsRef.current.inputLocked) {
           const world = screenToWorld(point.x, point.y)
           const axial = pixelToHex(world.x, world.y)
-          const { wildcard: armed, onPlace: place, onSelect: select } = propsRef.current
+          const { wildcard: armed, onPlace: drop, onSelect: select } = propsRef.current
           if (armed) select(axial.q, axial.r)
-          else place(axial.q, axial.r)
+          else drop(axial.q, axial.r)
         }
         moved = false
         canvas.style.cursor = 'grab'
       }
       setHover(point.x, point.y)
     }
+
+    const onUp = (event: PointerEvent) => finishPointer(event, true)
+    const onCancel = (event: PointerEvent) => finishPointer(event, false)
+    const onMenu = (event: Event) => event.preventDefault()
 
     const onWheel = (event: WheelEvent) => {
       if (propsRef.current.inputLocked) return
@@ -188,7 +217,10 @@ export function GameCanvas({
     }
 
     const onLeave = () => {
-      if (pointers.size === 0) hover = null
+      if (pointers.size === 0) {
+        hover = null
+        hoverKey = ''
+      }
     }
 
     const onDouble = () => {
@@ -210,7 +242,8 @@ export function GameCanvas({
     canvas.addEventListener('pointerdown', onDown)
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerup', onUp)
-    canvas.addEventListener('pointercancel', onUp)
+    canvas.addEventListener('pointercancel', onCancel)
+    canvas.addEventListener('contextmenu', onMenu)
     canvas.addEventListener('pointerleave', onLeave)
     canvas.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('dblclick', onDouble)
@@ -310,7 +343,7 @@ export function GameCanvas({
       for (const [key, spring] of bucket.springs) scales.set(key, spring.scale)
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      drawBackground(ctx, width, height, current.theme, shownSeason, now / 1000)
+      drawBackground(ctx, width, height, current.theme, current.skin, shownSeason, now / 1000)
       ctx.setTransform(
         dpr * cam.zoom,
         0,
@@ -323,6 +356,7 @@ export function GameCanvas({
         ctx,
         game: current.game,
         theme: current.theme,
+        skin: current.skin,
         time: now / 1000,
         hover,
         preview,
@@ -343,7 +377,8 @@ export function GameCanvas({
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
       canvas.removeEventListener('pointerup', onUp)
-      canvas.removeEventListener('pointercancel', onUp)
+      canvas.removeEventListener('pointercancel', onCancel)
+      canvas.removeEventListener('contextmenu', onMenu)
       canvas.removeEventListener('pointerleave', onLeave)
       canvas.removeEventListener('wheel', onWheel)
       canvas.removeEventListener('dblclick', onDouble)

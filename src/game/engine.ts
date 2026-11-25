@@ -406,6 +406,7 @@ export function createGame(mode: GameMode, options?: { date?: string; seed?: num
     droughts: [],
     gameOver: false,
     victory: false,
+    revived: false,
     log: 'The Ancient Seed waits.',
   }
 }

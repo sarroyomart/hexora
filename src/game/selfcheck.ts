@@ -1,4 +1,5 @@
 import { assessBiodiversity, applyWildcard, createGame, deal, placeTile, previewPlacement } from './engine'
+import { restoreHarmony } from './monetization'
 import { hexDistance, hexToPixel, neighborsOf, pixelToHex } from './hexMath'
 import { dailyNumber } from './seededRandom'
 import type { GameState } from './types'
@@ -186,6 +187,10 @@ function rules(): void {
   assert(today.deck.length === 40 && today.deck.join() === again.deck.join(), 'daily deck is not deterministic')
   assert(today.deck.join() !== tomorrow.deck.join(), 'consecutive days should differ')
   assert(assessBiodiversity(today.tiles).grade === 'D', 'a lone seed is a monoculture')
+
+  const revived = restoreHarmony(ended.state)
+  assert(revived.harmony === 30 && revived.revived && !revived.gameOver, 'second chance should return 30% harmony')
+  assert(restoreHarmony(revived) === revived, 'second chance is once per run')
 }
 
 hexRoundtrip()

@@ -12,7 +12,7 @@ You start with the Ancient Seed and one biome to place. Lay it on any open hex t
 - **Zen** is an endless run against your best score.
 - **Daily** deals the same 40 tiles to everyone on that calendar date. At the end, share a small emoji grid.
 
-Sound is generated in the browser. The first tap wakes it. Mute lives in the top bar, next to day and night.
+Sound is generated in the browser. The first tap wakes it. Mute lives in the top bar, next to day and night. The crown opens the Hexora Zen Pass: a $2.99 preview unlock that removes ads and adds the Kyoto Autumn and Deep Coral Reef palettes. On a phone, a finger that moves less than 10 pixels places a tile. A longer drag pans the land, and two fingers pinch to zoom.
 
 ## Run locally
 
@@ -31,4 +31,15 @@ npm run check
 
 `npm run check` replays the placement rules: rivers, floods, drought, landslides, extinctions, milestones, and the daily seed.
 
-Scores, streaks, the current board, and settings are stored in `localStorage` under the `hexora_` prefix.
+Scores, streaks, the current board, settings, and the Zen Pass flag are stored in `localStorage` under the `hexora_` prefix.
+
+## Android
+
+The native project is Capacitor. Web builds land in `dist`, and the Android app id is `com.hexora.game`.
+
+```bash
+npm run build
+npx cap sync android
+```
+
+Open the `android` folder in Android Studio and run it on a device or emulator. Haptics use `@capacitor/haptics` on device and stay silent in a browser. Rewarded ads and the Zen Pass purchase run in preview mode until AdMob and RevenueCat keys are set in `src/game/monetization.ts`.

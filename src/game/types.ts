@@ -14,6 +14,8 @@ export type GameMode = 'infinite' | 'daily'
 
 export type ThemeName = 'day' | 'night'
 
+export type SkinName = 'classic' | 'kyoto' | 'reef'
+
 export interface Tile {
   q: number
   r: number
@@ -47,6 +49,8 @@ export interface GameState {
   droughts: DroughtCluster[]
   gameOver: boolean
   victory: boolean
+  /** True after the once-per-run rewarded continue has been spent. */
+  revived: boolean
   log: string
 }
 
@@ -119,6 +123,7 @@ export const DAILY_LENGTH = 40
 export interface Settings {
   muted: boolean
   theme: ThemeName
+  skin: SkinName
   hintSeen: boolean
 }
 

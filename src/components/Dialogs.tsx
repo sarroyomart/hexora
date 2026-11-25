@@ -1,8 +1,10 @@
-import { Check, Share2, X } from 'lucide-react'
+import { Check, Crown, Share2, X } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { assessBiodiversity, seasonName } from '../game/engine'
+import { ZEN_PASS_PRICE } from '../game/monetization'
 import { buildShareText } from '../game/share'
-import type { GameMode, GameState } from '../game/types'
+import { biomePaint, SKIN_INFO } from '../game/skins'
+import { BIOMES, type Biome, type GameMode, type GameState, type SkinName } from '../game/types'
 
 export function RulesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null
@@ -84,15 +86,28 @@ const RULES = [
 export function SummaryDialog({
   open,
   game,
+  secondChance,
   onClose,
   onReplay,
+  onSecondChance,
 }: {
   open: boolean
   game: GameState
+  secondChance: boolean
   onClose: () => void
   onReplay: () => void
+  onSecondChance: () => Promise<boolean>
 }) {
   const [copied, setCopied] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [missed, setMissed] = useState(false)
+  const [seenOpen, setSeenOpen] = useState(open)
+  if (open !== seenOpen) {
+    setSeenOpen(open)
+    setCopied(false)
+    setPending(false)
+    setMissed(false)
+  }
   if (!open) return null
   const bio = assessBiodiversity(game.tiles)
   const share = buildShareText(game)
@@ -129,6 +144,26 @@ export function SummaryDialog({
         <pre className="selectable mt-4 max-h-48 overflow-auto rounded-2xl bg-[var(--track)] p-3 text-sm leading-relaxed whitespace-pre-wrap">
           {share}
         </pre>
+        {secondChance && (
+          <div className="mt-4">
+            <button
+              type="button"
+              className="flex min-h-11 w-full items-center justify-center rounded-full border border-[var(--line)] px-4 py-2 text-center text-sm disabled:opacity-60"
+              disabled={pending}
+              onClick={() => {
+                setPending(true)
+                setMissed(false)
+                void onSecondChance().then((granted) => {
+                  setPending(false)
+                  if (!granted) setMissed(true)
+                })
+              }}
+            >
+              {pending ? 'Restoring…' : 'Restore +30% Harmony (Watch Short Video)'}
+            </button>
+            {missed && <p className="mt-2 text-center text-xs text-[var(--muted)]">The video closed before the reward.</p>}
+          </div>
+        )}
         <div className="mt-4 flex flex-wrap gap-2">
           {game.mode === 'daily' && (
             <button type="button" className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm text-[var(--accent-ink)]" onClick={() => void copy()}>
@@ -179,10 +214,133 @@ export function ConfirmDialog({
   )
 }
 
+const SKINS: SkinName[] = ['classic', 'kyoto', 'reef']
+
+export function ZenPassDialog({
+  open,
+  unlocked,
+  skin,
+  onClose,
+  onPurchase,
+  onRestore,
+  onSkin,
+}: {
+  open: boolean
+  unlocked: boolean
+  skin: SkinName
+  onClose: () => void
+  onPurchase: () => Promise<boolean>
+  onRestore: () => Promise<boolean>
+  onSkin: (skin: SkinName) => void
+}) {
+  const [pending, setPending] = useState<'buy' | 'restore' | null>(null)
+  const [note, setNote] = useState('')
+  const [seenOpen, setSeenOpen] = useState(open)
+  if (open !== seenOpen) {
+    setSeenOpen(open)
+    setPending(null)
+    setNote('')
+  }
+  if (!open) return null
+
+  async function buy() {
+    setPending('buy')
+    setNote('')
+    const ok = await onPurchase()
+    setPending(null)
+    setNote(ok ? 'Zen Pass is unlocked on this device.' : 'The purchase did not finish.')
+  }
+
+  async function restore() {
+    setPending('restore')
+    setNote('')
+    const ok = await onRestore()
+    setPending(null)
+    setNote(ok ? 'Zen Pass restored.' : 'No purchase found on this device.')
+  }
+
+  return (
+    <Scrim onClose={onClose} label="Hexora Zen Pass">
+      <div className="w-[min(28rem,calc(100vw-2rem))] p-5 sm:p-7">
+        <Header title="Hexora Zen Pass" onClose={onClose} />
+        <p className="mt-2 flex items-center gap-2 text-sm text-[var(--muted)]">
+          <Crown size={16} />
+          {ZEN_PASS_PRICE} once. Ads step aside, and two palettes join the land.
+        </p>
+        <ul className="mt-4 space-y-2 text-sm">
+          <li>Removes every ad, including the second-chance video.</li>
+          <li>Kyoto Autumn and Deep Coral Reef recolor the board. The rules stay the same.</li>
+        </ul>
+        <div className="mt-5 grid gap-2">
+          {SKINS.map((id) => {
+            const info = SKIN_INFO[id]
+            const locked = id !== 'classic' && !unlocked
+            const active = skin === id
+            return (
+              <button
+                key={id}
+                type="button"
+                className="flex items-center gap-3 rounded-2xl border px-3 py-2 text-left disabled:opacity-70"
+                style={{ borderColor: active ? 'var(--accent)' : 'var(--line)' }}
+                disabled={locked || pending !== null}
+                onClick={() => onSkin(id)}
+                aria-pressed={active}
+              >
+                <span className="flex shrink-0">
+                  {BIOMES.map((biome) => (
+                    <Swatch key={biome} biome={biome} skin={id} />
+                  ))}
+                </span>
+                <span>
+                  <span className="block text-sm font-medium">{info.name}</span>
+                  <span className="block text-xs text-[var(--muted)]">{locked ? 'Included with the pass' : info.note}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        {!unlocked && (
+          <div className="mt-5 flex flex-col gap-2">
+            <button
+              type="button"
+              className="h-11 rounded-full bg-[var(--accent)] text-sm text-[var(--accent-ink)] disabled:opacity-60"
+              disabled={pending !== null}
+              onClick={() => void buy()}
+            >
+              {pending === 'buy' ? 'Unlocking…' : `Unlock for ${ZEN_PASS_PRICE}`}
+            </button>
+            <button
+              type="button"
+              className="h-11 rounded-full border border-[var(--line)] text-sm disabled:opacity-60"
+              disabled={pending !== null}
+              onClick={() => void restore()}
+            >
+              {pending === 'restore' ? 'Checking…' : 'Restore purchase'}
+            </button>
+            <p className="text-center text-xs text-[var(--muted)]">Preview unlock. No charge until the store is connected.</p>
+          </div>
+        )}
+        {note && <p className="mt-3 text-sm text-[var(--muted)]">{note}</p>}
+      </div>
+    </Scrim>
+  )
+}
+
+function Swatch({ biome, skin }: { biome: Biome; skin: SkinName }) {
+  const paint = biomePaint(skin, biome)
+  return (
+    <span
+      className="hex-clip -ms-1 h-7 w-7 first:ms-0"
+      style={{ background: `linear-gradient(180deg, ${paint.face[0]}, ${paint.face[1]})` }}
+      aria-hidden
+    />
+  )
+}
+
 function Scrim({ children, onClose, label }: { children: ReactNode; onClose: () => void; label: string }) {
   return (
     <div
-      className="fixed inset-0 z-40 overflow-y-auto bg-[rgba(20,24,20,0.46)] p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-40 overflow-y-auto bg-[rgba(20,24,20,0.46)] pt-[max(1rem,env(safe-area-inset-top))] pe-[max(1rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] ps-[max(1rem,env(safe-area-inset-left))] backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
       aria-label={label}

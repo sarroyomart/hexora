@@ -1,6 +1,6 @@
 import { assessBiodiversity } from './engine'
 import { shiftDate, todayString } from './seededRandom'
-import type { DailyRecord, GameState, Settings, Stats } from './types'
+import type { DailyRecord, GameState, Settings, SkinName, Stats } from './types'
 
 const SAVE_KEY = 'hexora_save'
 const STATS_KEY = 'hexora_stats'
@@ -15,6 +15,7 @@ export interface SaveFile {
 export const defaultSettings = (): Settings => ({
   muted: false,
   theme: 'day',
+  skin: 'classic',
   hintSeen: false,
 })
 
@@ -48,6 +49,14 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
+function isSkin(value: unknown): value is SkinName {
+  return value === 'classic' || value === 'kyoto' || value === 'reef'
+}
+
+function normalizeGame(game: GameState): GameState {
+  return { ...game, revived: game.revived === true }
+}
+
 function isGame(value: unknown): value is GameState {
   if (!value || typeof value !== 'object') return false
   const game = value as GameState
@@ -66,8 +75,8 @@ export function loadSave(): SaveFile {
   if (!parsed || parsed.version !== 1) return emptySave()
   return {
     version: 1,
-    infinite: isGame(parsed.infinite) ? parsed.infinite : null,
-    daily: isGame(parsed.daily) ? parsed.daily : null,
+    infinite: isGame(parsed.infinite) ? normalizeGame(parsed.infinite) : null,
+    daily: isGame(parsed.daily) ? normalizeGame(parsed.daily) : null,
   }
 }
 
@@ -82,6 +91,7 @@ export function loadSettings(): Settings {
   return {
     muted: parsed.muted === true,
     theme: parsed.theme === 'night' ? 'night' : 'day',
+    skin: isSkin(parsed.skin) ? parsed.skin : 'classic',
     hintSeen: parsed.hintSeen === true,
   }
 }

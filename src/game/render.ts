@@ -1,7 +1,8 @@
 import type { PlacementEffects } from './engine'
 import { currentBiome } from './engine'
 import { HEX_SIZE, hexKey, hexPolygon, hexToPixel, neighborsOf } from './hexMath'
-import { BIOME_INFO, type GameState, type ThemeName, type Tile } from './types'
+import { biomePaint, corePaint, seasonTable } from './skins'
+import type { GameState, SkinName, ThemeName, Tile } from './types'
 
 export interface Particle {
   x: number
@@ -37,20 +38,6 @@ const QUIET_REASONS = new Set([
   'The Ancient Seed stays',
 ])
 
-const DAY = [
-  ['#f4efe6', '#d7ebdf', '#f6d5e2', '#efe3c8'],
-  ['#f7f1d4', '#f0dc93', '#d5e6c0', '#f8e6bf'],
-  ['#f6ebdd', '#efc49a', '#e7d0bf', '#f4dec4'],
-  ['#eef3f6', '#d5e4ee', '#e6eef3', '#f7f4ee'],
-]
-
-const NIGHT = [
-  ['#121816', '#1c2e26', '#2a1e26', '#18221c'],
-  ['#16140f', '#2c2816', '#182820', '#241e14'],
-  ['#1a1410', '#2c1c14', '#241c16', '#1c1814'],
-  ['#101418', '#1a2832', '#182228', '#141a1e'],
-]
-
 function parseHex(color: string): [number, number, number] {
   const value = color.slice(1)
   return [parseInt(value.slice(0, 2), 16), parseInt(value.slice(2, 4), 16), parseInt(value.slice(4, 6), 16)]
@@ -63,8 +50,8 @@ function mix(a: string, b: string, t: number): string {
   return `rgb(${c[0]}, ${c[1]}, ${c[2]})`
 }
 
-function seasonColors(theme: ThemeName, season: number): string[] {
-  const table = theme === 'night' ? NIGHT : DAY
+function seasonColors(theme: ThemeName, skin: SkinName, season: number): string[] {
+  const table = seasonTable(theme, skin)
   const wrapped = ((season % 4) + 4) % 4
   const index = Math.floor(wrapped) % 4
   const next = (index + 1) % 4
@@ -72,15 +59,18 @@ function seasonColors(theme: ThemeName, season: number): string[] {
   return (table[index] ?? table[0]!).map((color, slot) => mix(color, table[next]?.[slot] ?? color, blend))
 }
 
-function faceOf(tile: Tile): { top: string; bottom: string; ink: string } {
-  if (tile.kind === 'core') return { top: '#f8e7b8', bottom: '#d4a24c', ink: '#6a4a16' }
-  if (tile.condition === 'swamp') return { top: '#9aa58a', bottom: '#3e4a3a', ink: '#243028' }
-  if (tile.condition === 'fertileAsh') return { top: '#6e5e54', bottom: '#2c2623', ink: '#e6c27a' }
-  if (tile.condition === 'crater') return { top: '#3a342f', bottom: '#161311', ink: '#8a8178' }
-  if (tile.condition === 'drought') return { top: '#e2b56a', bottom: '#8d5a28', ink: '#4a2c12' }
-  if (tile.condition === 'river') return { top: '#d7fbff', bottom: '#1c8eac', ink: '#0c5564' }
-  const info = BIOME_INFO[tile.kind]
-  return { top: info.face[0], bottom: info.face[1], ink: info.ink }
+function faceOf(tile: Tile, skin: SkinName): { top: string; bottom: string; ink: string; glow: string } {
+  if (tile.kind === 'core') {
+    const paint = corePaint(skin)
+    return { top: paint.face[0], bottom: paint.face[1], ink: paint.ink, glow: paint.glow }
+  }
+  if (tile.condition === 'swamp') return { top: '#9aa58a', bottom: '#3e4a3a', ink: '#243028', glow: '#9aa58a' }
+  if (tile.condition === 'fertileAsh') return { top: '#6e5e54', bottom: '#2c2623', ink: '#e6c27a', glow: '#e6c27a' }
+  if (tile.condition === 'crater') return { top: '#3a342f', bottom: '#161311', ink: '#8a8178', glow: '#8a8178' }
+  if (tile.condition === 'drought') return { top: '#e2b56a', bottom: '#8d5a28', ink: '#4a2c12', glow: '#e2b56a' }
+  if (tile.condition === 'river') return { top: '#d7fbff', bottom: '#1c8eac', ink: '#0c5564', glow: '#7ed7e4' }
+  const paint = biomePaint(skin, tile.kind)
+  return { top: paint.face[0], bottom: paint.face[1], ink: paint.ink, glow: paint.glow }
 }
 
 export function drawBackground(
@@ -88,10 +78,11 @@ export function drawBackground(
   width: number,
   height: number,
   theme: ThemeName,
+  skin: SkinName,
   season: number,
   time: number,
 ): void {
-  const colors = seasonColors(theme, season)
+  const colors = seasonColors(theme, skin, season)
   ctx.fillStyle = colors[0] ?? '#f4efe6'
   ctx.fillRect(0, 0, width, height)
   const blooms = [
@@ -119,8 +110,12 @@ function traceHex(ctx: CanvasRenderingContext2D, radius: number): void {
   hexPolygon(ctx, radius)
 }
 
-function drawSymbol(ctx: CanvasRenderingContext2D, tile: Tile, time: number): void {
-  const { ink } = faceOf(tile)
+function hexAlpha(color: string, alpha: number): string {
+  const [r, g, b] = parseHex(color)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function drawSymbol(ctx: CanvasRenderingContext2D, tile: Tile, time: number, ink: string): void {
   ctx.save()
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
@@ -269,17 +264,17 @@ function drawSymbol(ctx: CanvasRenderingContext2D, tile: Tile, time: number): vo
   ctx.restore()
 }
 
-function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, scale: number, time: number, theme: ThemeName): void {
+function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, scale: number, time: number, theme: ThemeName, skin: SkinName): void {
   const point = hexToPixel(tile.q, tile.r)
   const radius = HEX_SIZE * 0.92
-  const face = faceOf(tile)
+  const face = faceOf(tile, skin)
   ctx.save()
   ctx.translate(point.x, point.y)
   ctx.scale(scale, scale)
   if (tile.kind === 'core') {
     const glow = ctx.createRadialGradient(0, 0, 6, 0, 0, radius * 2.1)
-    glow.addColorStop(0, 'rgba(232, 196, 106, 0.55)')
-    glow.addColorStop(1, 'rgba(232, 196, 106, 0)')
+    glow.addColorStop(0, hexAlpha(face.glow, 0.55))
+    glow.addColorStop(1, hexAlpha(face.glow, 0))
     ctx.fillStyle = glow
     ctx.beginPath()
     ctx.arc(0, 0, radius * 2.1, 0, Math.PI * 2)
@@ -317,7 +312,7 @@ function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, scale: number, time
     ctx.stroke()
     ctx.restore()
   }
-  drawSymbol(ctx, tile, time)
+  drawSymbol(ctx, tile, time, face.ink)
   ctx.restore()
 }
 
@@ -364,6 +359,7 @@ export function drawWorld(input: {
   ctx: CanvasRenderingContext2D
   game: GameState
   theme: ThemeName
+  skin: SkinName
   time: number
   hover: { q: number; r: number } | null
   preview: PlacementEffects | null
@@ -373,7 +369,7 @@ export function drawWorld(input: {
   selectedKey: string | null
   wildcard: boolean
 }): void {
-  const { ctx, game, theme, time, hover, preview, scales, particles, floaters, selectedKey, wildcard } = input
+  const { ctx, game, theme, skin, time, hover, preview, scales, particles, floaters, selectedKey, wildcard } = input
   const occupied = new Map(game.tiles.map((tile) => [hexKey(tile.q, tile.r), tile]))
   const radius = HEX_SIZE * 0.92
   ctx.lineWidth = 1.5
@@ -416,7 +412,7 @@ export function drawWorld(input: {
   }
 
   const ordered = game.tiles.slice().sort((a, b) => a.r - b.r || a.q - b.q)
-  for (const tile of ordered) drawTile(ctx, tile, scales.get(hexKey(tile.q, tile.r)) ?? 1, time, theme)
+  for (const tile of ordered) drawTile(ctx, tile, scales.get(hexKey(tile.q, tile.r)) ?? 1, time, theme, skin)
 
   for (const particle of particles) drawParticle(ctx, particle)
 
@@ -436,7 +432,7 @@ export function drawWorld(input: {
 
   if (!wildcard && hover && preview && !QUIET_REASONS.has(preview.reason ?? '')) {
     const point = hexToPixel(hover.q, hover.r)
-    const ghost = biome ? BIOME_INFO[biome] : null
+    const ghost = biome ? biomePaint(skin, biome) : null
     ctx.save()
     ctx.translate(point.x, point.y)
     const pulse = 0.96 + Math.sin(time * 5) * 0.03

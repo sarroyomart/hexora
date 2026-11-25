@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { GameCanvas } from './components/GameCanvas'
-import { ConfirmDialog, RulesDialog, SummaryDialog } from './components/Dialogs'
+import { ConfirmDialog, RulesDialog, SummaryDialog, ZenPassDialog } from './components/Dialogs'
 import { HUD, type ToastItem } from './components/HUD'
 import { audio } from './game/audio'
+import { hapticForPlacement, hapticSuccess } from './game/haptics'
 import { applyWildcard, createGame, currentBiome, findTile, placeTile, type PlacementEffects } from './game/engine'
 import { hexKey, parseHexKey } from './game/hexMath'
+import { loadMonetization, purchaseZenPass, restoreHarmony, restorePurchases, showRewardedAd } from './game/monetization'
 import { todayString } from './game/seededRandom'
+import { statusBarColor } from './game/skins'
 import {
   applyStats,
   loadSave,
@@ -16,7 +19,7 @@ import {
   writeStats,
   type SaveFile,
 } from './game/storage'
-import type { Biome, GameMode, GameState, Settings, Stats } from './game/types'
+import type { Biome, GameMode, GameState, Settings, SkinName, Stats } from './game/types'
 
 function boot(): { save: SaveFile; game: GameState } {
   const save = loadSave()
@@ -39,6 +42,8 @@ export default function App() {
   const [rulesOpen, setRulesOpen] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [zenOpen, setZenOpen] = useState(false)
+  const [zen, setZen] = useState(loadMonetization)
   const [wildcardOn, setWildcardOn] = useState(false)
   const [target, setTarget] = useState<string | null>(null)
   const [toasts, setToasts] = useState<ToastItem[]>([])
@@ -78,8 +83,9 @@ export default function App() {
     writeSettings(settings)
     audio.setMuted(settings.muted)
     document.documentElement.dataset.theme = settings.theme
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', settings.theme === 'night' ? '#121816' : '#f4efe4')
-  }, [settings])
+    const skin = zen.isZenPassUnlocked ? settings.skin : 'classic'
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', statusBarColor(settings.theme, skin))
+  }, [settings, zen.isZenPassUnlocked])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -88,6 +94,7 @@ export default function App() {
         setRulesOpen(false)
         setSummaryOpen(false)
         setConfirmOpen(false)
+        setZenOpen(false)
         setWildcardOn(false)
         setTarget(null)
       }
@@ -121,6 +128,7 @@ export default function App() {
       return
     }
     if (biome) audio.playFor(biome, result.effects)
+    hapticForPlacement(result.effects)
     commitGame(result.state)
     if (!settings.hintSeen) setSettings((current) => ({ ...current, hintSeen: true }))
     note(result.effects)
@@ -169,19 +177,52 @@ export default function App() {
     setSummaryOpen(false)
   }
 
+  async function handleSecondChance(): Promise<boolean> {
+    const granted = await showRewardedAd()
+    if (!granted) return false
+    const next = restoreHarmony(game)
+    if (next === game) return false
+    wasOver.current = false
+    commitGame(next)
+    setStatus(next.log)
+    setSummaryOpen(false)
+    hapticSuccess()
+    return true
+  }
+
+  async function handlePurchase(): Promise<boolean> {
+    const unlocked = await purchaseZenPass()
+    setZen(loadMonetization())
+    return unlocked
+  }
+
+  async function handleRestore(): Promise<boolean> {
+    const unlocked = await restorePurchases()
+    setZen(loadMonetization())
+    return unlocked
+  }
+
+  function chooseSkin(skin: SkinName) {
+    if (skin !== 'classic' && !zen.isZenPassUnlocked) return
+    setSettings((current) => ({ ...current, skin }))
+  }
+
   function requestReset() {
     if (game.score > 0 && !game.gameOver && !game.victory) setConfirmOpen(true)
     else reset()
   }
 
   const targetTile = target ? findTile(game, parseHexKey(target).q, parseHexKey(target).r) ?? null : null
-  const locked = rulesOpen || summaryOpen || confirmOpen
+  const locked = rulesOpen || summaryOpen || confirmOpen || zenOpen
+  const zenPass = zen.isZenPassUnlocked
+  const skin: SkinName = zenPass ? settings.skin : 'classic'
 
   return (
     <main className="relative h-dvh w-full overflow-hidden text-[var(--ink)]">
       <GameCanvas
         game={game}
         theme={settings.theme}
+        skin={skin}
         season={game.season}
         wildcard={wildcardOn}
         selectedKey={target}
@@ -197,6 +238,8 @@ export default function App() {
         game={game}
         stats={stats}
         settings={settings}
+        skin={skin}
+        zenPass={zenPass}
         status={status}
         wildcardOn={wildcardOn}
         target={targetTile}
@@ -214,9 +257,26 @@ export default function App() {
         onWildcard={handleWildcard}
         onCancelTarget={() => setTarget(null)}
         onDismissHint={() => setSettings((current) => ({ ...current, hintSeen: true }))}
+        onZenPass={() => setZenOpen(true)}
       />
       <RulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
-      <SummaryDialog open={summaryOpen} game={game} onClose={() => setSummaryOpen(false)} onReplay={reset} />
+      <SummaryDialog
+        open={summaryOpen}
+        game={game}
+        secondChance={game.gameOver && !game.revived && !zenPass}
+        onClose={() => setSummaryOpen(false)}
+        onReplay={reset}
+        onSecondChance={handleSecondChance}
+      />
+      <ZenPassDialog
+        open={zenOpen}
+        unlocked={zenPass}
+        skin={skin}
+        onClose={() => setZenOpen(false)}
+        onPurchase={handlePurchase}
+        onRestore={handleRestore}
+        onSkin={chooseSkin}
+      />
       <ConfirmDialog open={confirmOpen} mode={game.mode} onClose={() => setConfirmOpen(false)} onConfirm={reset} />
     </main>
   )

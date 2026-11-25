@@ -40,18 +40,30 @@ body,
   margin: 0;
 }
 
+html {
+  overscroll-behavior: none;
+}
+
 body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
   background: var(--bg);
   color: var(--ink);
   font-family: "Avenir Next", "Segoe UI", "Gill Sans", "Trebuchet MS", sans-serif;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  touch-action: manipulation;
 }
 
 button,
 a {
   font: inherit;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 button {
