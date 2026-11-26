@@ -57,15 +57,23 @@ export function GameCanvas({
     if (pulse === 0 || seenPulse.current === pulse || !effects) return
     seenPulse.current = pulse
     const bucket = fx.current
-    bucket.shake = effects.imbalances.length > 0 ? 7 : 0
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    bucket.shake = reducedMotion ? 0 : effects.imbalances.length > 0 ? 7 : effects.surge ? 3.6 : 0
+    if (effects.surge && effects.focus && !reducedMotion) {
+      surgeBurst(bucket.particles, hexToPixel(effects.focus.q, effects.focus.r))
+    }
+    const stacked = new Map<string, number>()
     for (const note of effects.floaters) {
+      const key = `${note.q},${note.r}`
+      const index = stacked.get(key) ?? 0
+      stacked.set(key, index + 1)
       const point = hexToPixel(note.q, note.r)
       bucket.floaters.push({
-        x: point.x,
-        y: point.y - HEX_SIZE * 0.9,
+        x: point.x + index * 16,
+        y: point.y - HEX_SIZE * 0.9 - index * 10,
         text: note.text,
         tone: note.tone,
-        life: 1.2,
+        life: note.text.length > 16 ? 1.8 : 1.2,
       })
     }
     if (bucket.floaters.length > 24) bucket.floaters.splice(0, bucket.floaters.length - 24)
@@ -387,6 +395,26 @@ export function GameCanvas({
   }, [])
 
   return <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" aria-label="Hexora board" />
+}
+
+function surgeBurst(particles: Particle[], point: { x: number; y: number }): void {
+  for (let i = 0; i < 16; i++) {
+    const angle = (Math.PI * 2 * i) / 16
+    const gold = i % 2 === 0 ? '#f2d48a' : '#fff6d8'
+    particles.push({
+      x: point.x,
+      y: point.y,
+      vx: Math.cos(angle) * (36 + (i % 4) * 8),
+      vy: Math.sin(angle) * (36 + (i % 4) * 8) - 10,
+      life: 0.85,
+      max: 0.85,
+      kind: i % 3 === 0 ? 'firefly' : 'puff',
+      rot: angle,
+      spin: 2,
+      size: i % 3 === 0 ? 2.4 : 3.4,
+      color: gold,
+    })
+  }
 }
 
 function burst(particles: Particle[], point: { x: number; y: number }, reduced: boolean): void {

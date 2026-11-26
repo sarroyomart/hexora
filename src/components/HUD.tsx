@@ -1,5 +1,6 @@
-import { type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
+  BookOpen,
   CalendarDays,
   CircleHelp,
   Crown,
@@ -13,13 +14,14 @@ import {
   PawPrint,
   RotateCcw,
   Sparkles,
+  Sprout,
   Sun,
   TreePine,
   Volume2,
   VolumeX,
   type LucideIcon,
 } from 'lucide-react'
-import { assessBiodiversity, currentBiome, seasonName, upcomingBiomes } from '../game/engine'
+import { assessBiodiversity, currentBiome, seasonName, upcomingBiomes, type PlacementEffects } from '../game/engine'
 import { biomePaint } from '../game/skins'
 import { visibleStreak } from '../game/storage'
 import { todayString } from '../game/seededRandom'
@@ -36,7 +38,7 @@ const ICONS: Record<Biome, LucideIcon> = {
 export interface ToastItem {
   id: number
   text: string
-  tone: 'good' | 'bad'
+  tone: 'good' | 'bad' | 'warn'
 }
 
 interface Props {
@@ -49,6 +51,8 @@ interface Props {
   wildcardOn: boolean
   target: Tile | null
   toasts: ToastItem[]
+  effects: PlacementEffects | null
+  pulse: number
   onToggleMute: () => void
   onToggleTheme: () => void
   onMode: (mode: GameState['mode']) => void
@@ -60,6 +64,7 @@ interface Props {
   onCancelTarget: () => void
   onDismissHint: () => void
   onZenPass: () => void
+  onAtlas: () => void
 }
 
 export function HUD(props: Props) {
@@ -73,6 +78,8 @@ export function HUD(props: Props) {
     wildcardOn,
     target,
     toasts,
+    effects,
+    pulse,
     onToggleMute,
     onToggleTheme,
     onMode,
@@ -84,6 +91,7 @@ export function HUD(props: Props) {
     onCancelTarget,
     onDismissHint,
     onZenPass,
+    onAtlas,
   } = props
   const current = currentBiome(game)
   const upcoming = upcomingBiomes(game)
@@ -92,11 +100,12 @@ export function HUD(props: Props) {
   const streak = visibleStreak(stats, todayString())
   const ended = game.gameOver || game.victory
   const harmony = Math.round(game.harmony)
+  const delta = useScoreDelta(effects, pulse)
 
   return (
     <>
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-2 ps-[max(0.75rem,env(safe-area-inset-left))] pe-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="glass pointer-events-auto flex items-center gap-3 rounded-2xl px-3 py-2">
             <span className="hex-clip grid h-9 w-9 place-items-center bg-[#1f7a45] text-[#f6e7b4]" aria-hidden>
               <Sparkles size={16} />
@@ -109,7 +118,10 @@ export function HUD(props: Props) {
               </p>
             </div>
           </div>
-          <div className="pointer-events-auto flex shrink-0 justify-end gap-1">
+          <div className="pointer-events-auto ms-auto flex justify-end gap-1">
+            <IconButton label="Hexora Atlas" onClick={onAtlas}>
+              <BookOpen size={18} />
+            </IconButton>
             <IconButton label="Quick rules" onClick={onRules}>
               <CircleHelp size={18} />
             </IconButton>
@@ -125,17 +137,48 @@ export function HUD(props: Props) {
           </div>
         </div>
 
-        <div className="glass pointer-events-auto flex w-full max-w-xl flex-wrap items-center gap-4 rounded-2xl px-4 py-3">
+        <div className={`glass pointer-events-auto flex w-full max-w-xl flex-wrap items-center gap-4 rounded-2xl px-4 py-3 ${flowChrome(game)}`}>
           <div className="min-w-16">
             <p className="text-[10px] tracking-[0.16em] text-[var(--muted)] uppercase">Score</p>
-            <p key={game.score} className="score-pop text-3xl leading-none font-medium tabular-nums">
-              {game.score}
+            <p className="flex items-baseline gap-2">
+              <span key={game.score} className="score-pop text-3xl leading-none font-medium tabular-nums">
+                {game.score}
+              </span>
+              {delta && (delta.gained > 0 || delta.lost > 0) && (
+                <span
+                  key={delta.id}
+                  className="score-delta flex items-baseline gap-1 text-base font-medium tabular-nums leading-none"
+                  aria-hidden
+                >
+                  {delta.gained > 0 && <span className="text-[var(--good)]">+{delta.gained}</span>}
+                  {delta.lost > 0 && <span className="text-[var(--bad)]">−{delta.lost}</span>}
+                </span>
+              )}
             </p>
           </div>
           <div className="min-w-36 flex-1">
             <div className="mb-1 flex items-center justify-between text-[10px] tracking-[0.16em] text-[var(--muted)] uppercase">
-              <span>Harmony</span>
-              <span className="tabular-nums">{harmony}%</span>
+              <span className="flex items-center gap-2">
+                Harmony
+                {game.goldenFlow ? (
+                  <span className="text-[var(--gold)]">Golden ×2</span>
+                ) : game.goldenReady ? (
+                  <span className="text-[var(--gold)]">Flow ready</span>
+                ) : null}
+              </span>
+              <span className="flex items-center gap-1.5 tabular-nums">
+                {harmony}%
+                {delta && delta.harmony !== 0 && (
+                  <span
+                    key={`h-${delta.id}`}
+                    className="score-delta text-[10px] font-medium"
+                    style={{ color: delta.harmony > 0 ? 'var(--good)' : 'var(--bad)' }}
+                    aria-hidden
+                  >
+                    {delta.harmony > 0 ? `+${delta.harmony}` : `−${Math.abs(delta.harmony)}`}
+                  </span>
+                )}
+              </span>
             </div>
             <div className="h-2.5 overflow-hidden rounded-full bg-[var(--track)]">
               <div
@@ -165,14 +208,22 @@ export function HUD(props: Props) {
             </span>
           </div>
         </div>
+        {!ended && (
+          <div className="pointer-events-none flex">
+            <p className="glass pointer-events-auto inline-flex max-w-xl items-center gap-2 rounded-full px-3 py-1.5 text-sm">
+              <span className="text-[10px] tracking-[0.16em] text-[var(--muted)] uppercase">Bounty</span>
+              <span>{game.bounty.label}</span>
+            </p>
+          </div>
+        )}
       </header>
 
-      <div className="pointer-events-none absolute inset-x-0 z-30 flex flex-col items-center gap-2 px-4 top-[calc(env(safe-area-inset-top)+9.5rem)]">
+      <div className="pointer-events-none absolute inset-x-0 z-30 flex flex-col items-center gap-2 px-4 top-[calc(env(safe-area-inset-top)+13.25rem)]">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             className="toast-in glass pointer-events-auto max-w-md rounded-full px-4 py-2 text-sm"
-            style={{ color: toast.tone === 'bad' ? '#a33b32' : 'var(--ink)' }}
+            style={{ color: toast.tone === 'bad' ? '#a33b32' : toast.tone === 'warn' ? '#a36b12' : 'var(--ink)' }}
           >
             {toast.text}
           </div>
@@ -226,7 +277,7 @@ export function HUD(props: Props) {
           </div>
         )}
 
-        <div className="glass pointer-events-auto mx-auto flex w-full max-w-xl flex-col items-center gap-3 rounded-[28px] px-4 py-3">
+        <div className={`glass pointer-events-auto mx-auto flex w-full max-w-xl flex-col items-center gap-3 rounded-[28px] px-4 py-3 ${flowChrome(game)}`}>
           <p className="min-h-5 text-center text-sm text-[var(--muted)]">{status}</p>
           <div className="flex items-end justify-center gap-3 sm:gap-5">
             <button
@@ -249,7 +300,7 @@ export function HUD(props: Props) {
                 </>
               ) : (
                 <div className="grid h-20 w-20 place-items-center text-center text-xs text-[var(--muted)]">
-                  {game.victory ? 'The day holds' : 'Balance lost'}
+                  {game.victory ? 'The day holds' : game.endReason === 'seeds' ? 'Out of seeds' : 'Balance lost'}
                 </div>
               )}
             </div>
@@ -260,6 +311,32 @@ export function HUD(props: Props) {
                   <span className="text-[10px] tracking-[0.14em] text-[var(--muted)] uppercase">{index === 0 ? 'Next' : ''}</span>
                 </div>
               ))}
+              {game.mode === 'infinite' && (
+                <div
+                  className="mb-4 flex flex-col items-center gap-1"
+                  title="Each tile spends 1. Bounties return +4, score milestones return +6."
+                  aria-label={`${game.seeds} seeds remaining`}
+                >
+                  <span
+                    className={`relative flex h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-2xl border px-1.5 text-[var(--ink)] ${delta?.seeds ? 'seed-gain' : 'border-[var(--line)]'}`}
+                  >
+                    <Sprout size={13} />
+                    <span key={game.seeds} className="score-pop text-sm leading-none font-medium tabular-nums">
+                      {game.seeds}
+                    </span>
+                    {delta && delta.seeds > 0 && (
+                      <span
+                        key={`s-${delta.id}`}
+                        className="score-delta absolute -right-1 -top-2 text-[10px] font-medium text-[var(--good)]"
+                        aria-hidden
+                      >
+                        +{delta.seeds}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[10px] tracking-[0.14em] text-[var(--muted)] uppercase">Seeds</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex w-full items-center justify-between gap-2 text-xs text-[var(--muted)]">
@@ -286,7 +363,18 @@ export function HUD(props: Props) {
         </div>
       </footer>
       <p className="sr-only" aria-live="polite">
-        {status} Score {game.score}. Harmony {harmony} percent.
+        {status} Score {game.score}
+        {delta && delta.gained > 0 ? `, plus ${delta.gained}` : ''}
+        {delta && delta.lost > 0 ? `, minus ${delta.lost}` : ''}. Harmony {harmony} percent.
+        {game.mode === 'infinite' ? ` Seeds ${game.seeds}.` : ''}
+        {game.goldenFlow ? ' Golden flow times two.' : game.goldenReady ? ' Flow ready.' : ''}
+        Bounty {game.bounty.label}
+        {delta && delta.harmony !== 0
+          ? delta.harmony > 0
+            ? `, plus ${delta.harmony}`
+            : `, minus ${Math.abs(delta.harmony)}`
+          : ''}
+        .
       </p>
     </>
   )
@@ -342,6 +430,41 @@ function ModeButton({
       {label}
     </button>
   )
+}
+
+function flowChrome(game: GameState): string {
+  if (game.goldenFlow) return 'golden-flow'
+  if (game.goldenReady) return 'golden-ready'
+  return ''
+}
+
+function useScoreDelta(effects: PlacementEffects | null, pulse: number) {
+  const [delta, setDelta] = useState<{ id: number; gained: number; lost: number; harmony: number; seeds: number } | null>(null)
+
+  useEffect(() => {
+    if (!effects?.valid) {
+      if (!effects) setDelta(null)
+      return
+    }
+    if (effects.gained === 0 && effects.lost === 0 && effects.harmonyDelta === 0 && effects.seedsGained === 0) {
+      setDelta(null)
+      return
+    }
+    const next = {
+      id: pulse,
+      gained: effects.gained,
+      lost: effects.lost,
+      harmony: effects.harmonyDelta,
+      seeds: effects.seedsGained,
+    }
+    setDelta(next)
+    const timer = window.setTimeout(() => {
+      setDelta((current) => (current?.id === next.id ? null : current))
+    }, 2400)
+    return () => window.clearTimeout(timer)
+  }, [effects, pulse])
+
+  return delta
 }
 
 function harmonyColor(harmony: number): string {

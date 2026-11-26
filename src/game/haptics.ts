@@ -32,7 +32,7 @@ export function hapticForPlacement(effects: PlacementEffects): void {
     hapticWarning()
     return
   }
-  if (effects.milestone || effects.points >= 4) {
+  if (effects.bounty || effects.rescue || effects.milestone || effects.surge || effects.points >= 4) {
     hapticSuccess()
     return
   }

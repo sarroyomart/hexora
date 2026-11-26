@@ -7,9 +7,12 @@ A relaxing strategy puzzle about ecological balance on a hexagonal board. Spring
 You start with the Ancient Seed and one biome to place. Lay it on any open hex touching the living land. A ghost of the tile shows the points, in green, or the trouble, in red, before you commit. The next two biomes wait in the queue.
 
 - Drag the board to look around. Scroll or pinch to zoom. Double-click, or press `0`, to recenter.
-- Harmony starts full. Synergies restore it. Flood, drought, landslide, and extinction crack it. At zero, the mosaic ends.
-- Score milestones turn the season — Spring, Summer, Autumn, Winter — and grant a restoration wildcard. Spend it to clear or transform one hex.
-- **Zen** is an endless run against your best score.
+- Harmony starts full. Synergies restore it. A tile with no synergy drains 6%. Flood, drought, landslide, and extinction crack it further. At zero, the mosaic ends.
+- Zen starts with 25 seeds. Each tile spends one. Bounties return 4 and score milestones return 6. At 0 seeds the season ends even while harmony remains. One rewarded continue can restore harmony or seeds, matching how the run ended.
+- A second clean synergy at full harmony lights Golden Flow and doubles score until a blank turn or a disaster. Placements worth 6 or more before that multiplier surge. Saving a drought or a fading creature on the warning turn averts the disaster.
+- The Atlas, opened from the top bar, keeps 12 rare formations on this device.
+- Score milestones turn the season — Spring, Summer, Autumn, Winter — and grant a restoration wildcard. Spend it to clear or transform one hex. On turn 15, drought and flood arrive one hex sooner.
+- **Zen** is a run against your best score, limited by seeds and harmony.
 - **Daily** deals the same 40 tiles to everyone on that calendar date. At the end, share a small emoji grid.
 
 Sound is generated in the browser. The first tap wakes it. Mute lives in the top bar, next to day and night. The crown opens the Hexora Zen Pass: a $2.99 preview unlock that removes ads and adds the Kyoto Autumn and Deep Coral Reef palettes. On a phone, a finger that moves less than 10 pixels places a tile. A longer drag pans the land, and two fingers pinch to zoom.

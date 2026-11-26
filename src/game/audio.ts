@@ -46,6 +46,7 @@ class HexoraAudio {
   playFor(biome: Biome, effects: PlacementEffects): void {
     if (effects.sound === 'alert') this.playAlert(biome)
     else this.playBiome(biome)
+    if (effects.golden && effects.gained > 0) this.playGolden()
     if (effects.milestone) this.playMilestone()
   }
 
@@ -68,6 +69,15 @@ class HexoraAudio {
   private playAlert(biome: Biome): void {
     this.playNotes([PENTA.D4, PENTA.F4, PENTA.C5], 0.55, 0.05)
     this.playNotes([CHORDS[biome][0]!], 0.35, 0.03)
+  }
+
+  private playGolden(): void {
+    const ctx = this.ready()
+    if (!ctx || !this.master) return
+    const notes = [PENTA.D5, PENTA.G5, 880, 1174.66]
+    notes.forEach((freq, index) => {
+      this.voice(ctx, freq, ctx.currentTime + index * 0.045, 0.26, 'sine', 0.045, this.master!)
+    })
   }
 
   private playMilestone(): void {

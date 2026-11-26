@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { GameCanvas } from './components/GameCanvas'
-import { ConfirmDialog, RulesDialog, SummaryDialog, ZenPassDialog } from './components/Dialogs'
+import { AtlasDialog, ConfirmDialog, RulesDialog, SummaryDialog, ZenPassDialog } from './components/Dialogs'
 import { HUD, type ToastItem } from './components/HUD'
+import { atlasCard } from './game/atlas'
 import { audio } from './game/audio'
 import { hapticForPlacement, hapticSuccess } from './game/haptics'
 import { applyWildcard, createGame, currentBiome, findTile, placeTile, type PlacementEffects } from './game/engine'
 import { hexKey, parseHexKey } from './game/hexMath'
-import { loadMonetization, purchaseZenPass, restoreHarmony, restorePurchases, showRewardedAd } from './game/monetization'
+import { loadMonetization, purchaseZenPass, restoreHarmony, restorePurchases, restoreSeeds, showRewardedAd } from './game/monetization'
 import { todayString } from './game/seededRandom'
 import { statusBarColor } from './game/skins'
 import {
   applyStats,
+  loadAtlas,
   loadSave,
   loadSettings,
   loadStats,
+  writeAtlas,
   writeSave,
   writeSettings,
   writeStats,
@@ -43,6 +46,8 @@ export default function App() {
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [zenOpen, setZenOpen] = useState(false)
+  const [atlasOpen, setAtlasOpen] = useState(false)
+  const [atlas, setAtlas] = useState<string[]>(loadAtlas)
   const [zen, setZen] = useState(loadMonetization)
   const [wildcardOn, setWildcardOn] = useState(false)
   const [target, setTarget] = useState<string | null>(null)
@@ -95,6 +100,7 @@ export default function App() {
         setSummaryOpen(false)
         setConfirmOpen(false)
         setZenOpen(false)
+        setAtlasOpen(false)
         setWildcardOn(false)
         setTarget(null)
       }
@@ -116,6 +122,22 @@ export default function App() {
     for (const toast of next.toasts) pushToast(toast.text, toast.tone)
   }
 
+  function rememberDiscoveries(state: GameState, formations: readonly string[]): GameState {
+    const known = new Set(atlas)
+    const unseen = formations.filter((id) => !known.has(id))
+    if (unseen.length === 0) return state
+    const merged = [...atlas, ...unseen]
+    writeAtlas(merged)
+    setAtlas(merged)
+    const brandNew = unseen.filter((id) => !state.freshDiscoveries.includes(id))
+    for (const id of brandNew) {
+      const card = atlasCard(id)
+      if (card) pushToast(`${card.name} enters the Atlas.`, 'good')
+    }
+    if (brandNew.length > 0) hapticSuccess()
+    return { ...state, freshDiscoveries: [...state.freshDiscoveries, ...brandNew] }
+  }
+
   function handlePlace(q: number, r: number) {
     if (wildcardOn) {
       if (findTile(game, q, r)) setTarget(hexKey(q, r))
@@ -129,7 +151,7 @@ export default function App() {
     }
     if (biome) audio.playFor(biome, result.effects)
     hapticForPlacement(result.effects)
-    commitGame(result.state)
+    commitGame(rememberDiscoveries(result.state, result.effects.formations))
     if (!settings.hintSeen) setSettings((current) => ({ ...current, hintSeen: true }))
     note(result.effects)
   }
@@ -143,7 +165,7 @@ export default function App() {
       return
     }
     audio.playRestore()
-    commitGame(result.state)
+    commitGame(rememberDiscoveries(result.state, result.effects.formations))
     setTarget(null)
     setWildcardOn(false)
     note(result.effects)
@@ -155,6 +177,7 @@ export default function App() {
     setStatus(next.log)
     setWildcardOn(false)
     setTarget(null)
+    setEffects(null)
   }
 
   function switchMode(mode: GameMode) {
@@ -180,7 +203,7 @@ export default function App() {
   async function handleSecondChance(): Promise<boolean> {
     const granted = await showRewardedAd()
     if (!granted) return false
-    const next = restoreHarmony(game)
+    const next = game.endReason === 'seeds' ? restoreSeeds(game) : restoreHarmony(game)
     if (next === game) return false
     wasOver.current = false
     commitGame(next)
@@ -213,7 +236,8 @@ export default function App() {
   }
 
   const targetTile = target ? findTile(game, parseHexKey(target).q, parseHexKey(target).r) ?? null : null
-  const locked = rulesOpen || summaryOpen || confirmOpen || zenOpen
+  const locked = rulesOpen || summaryOpen || confirmOpen || zenOpen || atlasOpen
+  const best = game.mode === 'infinite' ? stats.infiniteBest : Math.max(stats.dailyBest, stats.dailyByDate[game.date]?.score ?? 0)
   const zenPass = zen.isZenPassUnlocked
   const skin: SkinName = zenPass ? settings.skin : 'classic'
 
@@ -244,6 +268,8 @@ export default function App() {
         wildcardOn={wildcardOn}
         target={targetTile}
         toasts={toasts}
+        effects={effects}
+        pulse={pulse}
         onToggleMute={() => setSettings((current) => ({ ...current, muted: !current.muted }))}
         onToggleTheme={() => setSettings((current) => ({ ...current, theme: current.theme === 'day' ? 'night' : 'day' }))}
         onMode={switchMode}
@@ -258,11 +284,13 @@ export default function App() {
         onCancelTarget={() => setTarget(null)}
         onDismissHint={() => setSettings((current) => ({ ...current, hintSeen: true }))}
         onZenPass={() => setZenOpen(true)}
+        onAtlas={() => setAtlasOpen(true)}
       />
       <RulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />
       <SummaryDialog
         open={summaryOpen}
         game={game}
+        best={best}
         secondChance={game.gameOver && !game.revived && !zenPass}
         onClose={() => setSummaryOpen(false)}
         onReplay={reset}
@@ -278,6 +306,7 @@ export default function App() {
         onSkin={chooseSkin}
       />
       <ConfirmDialog open={confirmOpen} mode={game.mode} onClose={() => setConfirmOpen(false)} onConfirm={reset} />
+      <AtlasDialog open={atlasOpen} discovered={atlas} onClose={() => setAtlasOpen(false)} />
     </main>
   )
 }

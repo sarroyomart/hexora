@@ -1,10 +1,12 @@
+import { isAtlasId } from './atlas'
 import { assessBiodiversity } from './engine'
 import { shiftDate, todayString } from './seededRandom'
-import type { DailyRecord, GameState, Settings, SkinName, Stats } from './types'
+import { BOUNTY_LABEL, bountyById, type BountyId, type DailyRecord, type EndReason, type GameState, type Settings, type SkinName, type Stats } from './types'
 
 const SAVE_KEY = 'hexora_save'
 const STATS_KEY = 'hexora_stats'
 const SETTINGS_KEY = 'hexora_settings'
+const ATLAS_KEY = 'hexora_atlas'
 
 export interface SaveFile {
   version: 1
@@ -53,8 +55,39 @@ function isSkin(value: unknown): value is SkinName {
   return value === 'classic' || value === 'kyoto' || value === 'reef'
 }
 
+function isBountyId(value: unknown): value is BountyId {
+  return typeof value === 'string' && value in BOUNTY_LABEL
+}
+
+function knownIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((id): id is string => typeof id === 'string' && isAtlasId(id))
+}
+
 function normalizeGame(game: GameState): GameState {
-  return { ...game, revived: game.revived === true }
+  const bountyId = isBountyId(game.bounty?.id) ? game.bounty.id : 'river4'
+  let endReason: EndReason | null = game.endReason === 'harmony' || game.endReason === 'seeds' ? game.endReason : null
+  if (!game.gameOver) endReason = null
+  else if (!endReason) endReason = 'harmony'
+  return {
+    ...game,
+    revived: game.revived === true,
+    seeds: typeof game.seeds === 'number' && Number.isFinite(game.seeds) ? game.seeds : game.mode === 'infinite' ? 25 : 0,
+    goldenFlow: game.goldenFlow === true,
+    goldenReady: game.goldenReady === true,
+    bounty: bountyById(bountyId),
+    discoveries: knownIds(game.discoveries),
+    freshDiscoveries: knownIds(game.freshDiscoveries),
+    endReason,
+  }
+}
+
+export function loadAtlas(): string[] {
+  return knownIds(readJson(ATLAS_KEY))
+}
+
+export function writeAtlas(ids: readonly string[]): void {
+  writeJson(ATLAS_KEY, [...new Set(ids.filter(isAtlasId))])
 }
 
 function isGame(value: unknown): value is GameState {

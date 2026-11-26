@@ -43,10 +43,11 @@ export function emojiGrid(tiles: Tile[]): string {
 export function buildShareText(state: GameState): string {
   const bio = assessBiodiversity(state.tiles)
   const heading = state.mode === 'daily' ? `Hexora Daily #${state.dailyNumber}` : 'Hexora Zen'
+  const reason = state.endReason === 'seeds' ? 'Seed Supply Exhausted' : state.gameOver ? 'Harmony Collapsed' : ''
   return [
     heading,
     `Score ${state.score} · Harmony ${Math.round(state.harmony)}% · Biodiversity ${bio.grade}`,
-    bio.label,
+    reason || bio.label,
     '',
     emojiGrid(state.tiles),
   ].join('\n')

@@ -316,14 +316,34 @@ function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, scale: number, time
   ctx.restore()
 }
 
+function wrapDetail(ctx: CanvasRenderingContext2D, detail: string, maxWidth: number): string[] {
+  if (!detail) return []
+  if (ctx.measureText(detail).width <= maxWidth) return [detail]
+  const chunks = detail.split(' · ')
+  const lines: string[] = []
+  let current = ''
+  for (const chunk of chunks) {
+    const next = current ? `${current} · ${chunk}` : chunk
+    if (current && ctx.measureText(next).width > maxWidth) {
+      lines.push(current)
+      current = chunk
+    } else current = next
+  }
+  if (current) lines.push(current)
+  return lines
+}
+
 function drawLabel(ctx: CanvasRenderingContext2D, x: number, y: number, title: string, detail: string, tone: PlacementEffects['tone']): void {
   ctx.save()
+  ctx.font = `500 12px ${FONT}`
+  const lines = wrapDetail(ctx, detail, 168)
   ctx.font = `600 15px ${FONT}`
   const titleWidth = ctx.measureText(title).width
   ctx.font = `500 12px ${FONT}`
-  const detailWidth = detail ? ctx.measureText(detail).width : 0
+  let detailWidth = 0
+  for (const line of lines) detailWidth = Math.max(detailWidth, ctx.measureText(line).width)
   const width = Math.max(titleWidth, detailWidth) + 22
-  const height = detail ? 42 : 28
+  const height = lines.length > 0 ? 28 + lines.length * 16 : 28
   const left = x - width / 2
   const top = y - height
   ctx.shadowColor = 'rgba(0,0,0,0.16)'
@@ -337,11 +357,11 @@ function drawLabel(ctx: CanvasRenderingContext2D, x: number, y: number, title: s
   ctx.textBaseline = 'middle'
   ctx.fillStyle = tone === 'bad' ? '#8d2e24' : tone === 'warn' ? '#8a5a12' : tone === 'neutral' ? '#3d4a44' : '#14643a'
   ctx.font = `600 15px ${FONT}`
-  ctx.fillText(title, x, top + (detail ? 15 : height / 2))
-  if (detail) {
-    ctx.font = `500 12px ${FONT}`
-    ctx.fillText(detail, x, top + 31)
-  }
+  ctx.fillText(title, x, top + (lines.length > 0 ? 15 : height / 2))
+  ctx.font = `500 12px ${FONT}`
+  lines.forEach((line, index) => {
+    ctx.fillText(line, x, top + 31 + index * 16)
+  })
   ctx.restore()
 }
 
@@ -453,7 +473,7 @@ export function drawWorld(input: {
   for (const floater of floaters) {
     ctx.save()
     ctx.globalAlpha = Math.max(0, Math.min(1, floater.life))
-    ctx.font = `700 18px ${FONT}`
+    ctx.font = `700 ${floater.text.length > 16 ? 13 : 18}px ${FONT}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = floater.tone === 'bad' ? '#a33b32' : floater.tone === 'warn' ? '#a36b12' : '#1c7a45'

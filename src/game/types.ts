@@ -51,6 +51,19 @@ export interface GameState {
   victory: boolean
   /** True after the once-per-run rewarded continue has been spent. */
   revived: boolean
+  /** Why a lost run ended. Null while the mosaic is still alive. */
+  endReason: EndReason | null
+  /** Tiles left to place in Zen. Daily runs ignore this purse. */
+  seeds: number
+  /** 2× score while a clean synergy streak holds after lighting at full harmony. */
+  goldenFlow: boolean
+  /** One clean synergy at 100% harmony has landed; the next one lights Golden Flow. */
+  goldenReady: boolean
+  bounty: Bounty
+  /** Formation ids seen on this run, including ones already in the Atlas. */
+  discoveries: string[]
+  /** Formation ids unlocked for the first time during this run. */
+  freshDiscoveries: string[]
   log: string
 }
 
@@ -119,6 +132,41 @@ export const SEASONS = [
 export const MILESTONES = [100, 250, 500, 1000, 1600, 2500, 4000, 6000, 9000, 13000, 18000, 25000] as const
 
 export const DAILY_LENGTH = 40
+
+/** Zen opens with a finite tile purse. Placing spends one. */
+export const STARTING_SEEDS = 25
+
+export const SEED_BOUNTY_REWARD = 4
+
+export const SEED_MILESTONE_REWARD = 6
+
+export const BOUNTY_SCORE = 20
+
+export const RESCUE_SCORE = 15
+
+export type BountyId = 'river4' | 'fauna' | 'meadow4' | 'grove5' | 'peaks3' | 'ash'
+
+export interface Bounty {
+  id: BountyId
+  label: string
+}
+
+export const BOUNTY_ORDER: readonly BountyId[] = ['river4', 'fauna', 'meadow4', 'grove5', 'peaks3', 'ash']
+
+export const BOUNTY_LABEL: Record<BountyId, string> = {
+  river4: 'Build a 4-tile River',
+  fauna: 'Trigger a Complete Ecosystem with Fauna',
+  meadow4: 'Surround a Meadow with 4 biomes',
+  grove5: 'Grow a grove of 5 forests',
+  peaks3: 'Raise 3 connected peaks',
+  ash: 'Root a meadow in fertile ash',
+}
+
+export type EndReason = 'harmony' | 'seeds'
+
+export function bountyById(id: BountyId): Bounty {
+  return { id, label: BOUNTY_LABEL[id] }
+}
 
 export interface Settings {
   muted: boolean

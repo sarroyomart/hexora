@@ -168,13 +168,27 @@ export function restorePurchases(): Promise<boolean> {
 
 /** Once per run. Harmony was 0; it returns at 30 and play continues. */
 export function restoreHarmony(state: GameState): GameState {
-  if (!state.gameOver || state.revived || state.victory) return state
+  if (!state.gameOver || state.revived || state.victory || state.endReason === 'seeds') return state
   const harmony = Math.min(100, Math.max(0, state.harmony) + 30)
   return {
     ...state,
     harmony,
     gameOver: false,
+    endReason: null,
     revived: true,
     log: 'A brief rest returns 30% harmony.',
+  }
+}
+
+/** Once per run. The seed purse was empty; eight seeds return and play continues. */
+export function restoreSeeds(state: GameState): GameState {
+  if (!state.gameOver || state.revived || state.victory || state.endReason !== 'seeds') return state
+  return {
+    ...state,
+    seeds: state.seeds + 8,
+    gameOver: false,
+    endReason: null,
+    revived: true,
+    log: 'An emergency cache returns 8 seeds.',
   }
 }

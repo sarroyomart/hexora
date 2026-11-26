@@ -1,5 +1,6 @@
 import { Check, Crown, Share2, X } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
+import { ATLAS, atlasCard } from '../game/atlas'
 import { assessBiodiversity, seasonName } from '../game/engine'
 import { ZEN_PASS_PRICE } from '../game/monetization'
 import { buildShareText } from '../game/share'
@@ -31,7 +32,7 @@ export function RulesDialog({ open, onClose }: { open: boolean; onClose: () => v
           ))}
         </div>
         <p className="mt-5 text-sm leading-relaxed text-[var(--muted)]">
-          Drag to move the land. Scroll or pinch to zoom. Double-click, or press 0, to recenter. Sound is synthesized in the browser. Zen runs until harmony fails. Daily Hexora deals the same 40 tiles from the date.
+          Zen begins with 25 seeds. Each tile spends one. A finished bounty returns 4, and each score milestone returns 6. At 0 seeds the season ends even if harmony remains. A tile with no synergy costs 6% harmony. On turn 15, drought and flood arrive one hex sooner. A second clean synergy at full harmony lights Golden Flow and doubles score until a blank turn or a disaster. Drag to move the land. Scroll or pinch to zoom. Double-click, or press 0, to recenter. Daily Hexora still deals the same 40 tiles from the date.
         </p>
       </div>
     </Scrim>
@@ -44,14 +45,14 @@ const RULES = [
     title: 'Water',
     wash: '#e5f7fb',
     ink: '#0e5c6b',
-    body: '+2 for each neighboring grove or meadow. Three connected springs become a river for +5. A spring with five water neighbors floods into swamp. A grove beside that swamp drains it.',
+    body: '+2 for each neighboring grove or meadow. Three connected springs become a river for +5. A spring with five water neighbors floods into swamp, or four after the climate shifts. A grove beside that swamp drains it.',
   },
   {
     kicker: 'Grove',
     title: 'Forest',
     wash: '#e5f6ea',
     ink: '#0d3d24',
-    body: '+2 for each spring and +1 for each creature. Six or more groves that touch neither a spring nor the Ancient Seed enter drought. Without water on the next turn, three burn into fertile ash.',
+    body: '+2 for each spring and +1 for each creature. Six or more groves that touch neither a spring nor the Ancient Seed enter drought, or five after the climate shifts. Without water on the next turn, three burn into fertile ash.',
   },
   {
     kicker: 'Flora',
@@ -79,13 +80,14 @@ const RULES = [
     title: 'Harmony',
     wash: '#f8f1e4',
     ink: '#3d3428',
-    body: 'You begin full. Synergies mend harmony by 2–5%. Flood, wildfire, landslide, and extinction crack it by 15–25%. At 0% the mosaic ends. Scores of 100, 250, 500, 1000 and beyond turn the season and grant a restoration wildcard.',
+    body: 'You begin full. Synergies mend harmony by 2–5%. A first clean synergy at 100% reads Flow ready. The second lights Golden Flow and doubles score until a blank turn or an imbalance. A tile worth 0 drains 6%. Flood, wildfire, landslide, and extinction crack harmony by 15–25%. Saving a drought or a fading creature on the warning turn scores +15. At 0% the mosaic ends.',
   },
 ]
 
 export function SummaryDialog({
   open,
   game,
+  best,
   secondChance,
   onClose,
   onReplay,
@@ -93,6 +95,7 @@ export function SummaryDialog({
 }: {
   open: boolean
   game: GameState
+  best: number
   secondChance: boolean
   onClose: () => void
   onReplay: () => void
@@ -111,7 +114,17 @@ export function SummaryDialog({
   if (!open) return null
   const bio = assessBiodiversity(game.tiles)
   const share = buildShareText(game)
-  const heading = game.gameOver ? 'The land fell quiet' : game.mode === 'daily' ? 'The day holds' : 'This mosaic rests'
+  const heading = game.victory
+    ? game.mode === 'daily'
+      ? 'The day holds'
+      : 'This mosaic rests'
+    : game.endReason === 'seeds'
+      ? 'Seasons Complete (Out of Seeds)'
+      : 'Harmony Collapsed'
+  const reason = game.endReason === 'seeds' ? 'Seed Supply Exhausted' : game.gameOver ? 'Harmony Collapsed' : bio.label
+  const continueLabel =
+    game.endReason === 'seeds' ? 'Emergency +8 Seeds (Watch Short Video)' : 'Restore +30% Harmony (Watch Short Video)'
+  const unlocked = game.freshDiscoveries.map((id) => atlasCard(id)?.name ?? id)
 
   async function copy() {
     try {
@@ -127,20 +140,27 @@ export function SummaryDialog({
       <div className="w-[min(28rem,calc(100vw-2rem))] p-5 sm:p-7">
         <Header title={heading} onClose={onClose} />
         <p className="mt-1 text-sm text-[var(--muted)]">
+          {reason}
+          {' · '}
           {seasonName(game.season)}
           {game.mode === 'daily' ? ` · Hexora Daily #${game.dailyNumber}` : ' · Zen'}
         </p>
         <div className="mt-5 flex items-end justify-between gap-4">
           <div>
-            <p className="text-[10px] tracking-[0.16em] text-[var(--muted)] uppercase">Score</p>
+            <p className="text-[10px] tracking-[0.16em] text-[var(--muted)] uppercase">Final score</p>
             <p className="text-5xl font-medium tabular-nums">{game.score}</p>
           </div>
           <div className="text-right">
-            <p className="text-5xl font-medium">{bio.grade}</p>
-            <p className="text-sm text-[var(--muted)]">{bio.label}</p>
+            <p className="text-[10px] tracking-[0.16em] text-[var(--muted)] uppercase">Best</p>
+            <p className="text-3xl font-medium tabular-nums">{Math.max(best, game.score)}</p>
           </div>
         </div>
-        <p className="mt-3 text-sm text-[var(--muted)]">Harmony {Math.round(game.harmony)}% · {game.placedCount} tiles</p>
+        <p className="mt-3 text-sm text-[var(--muted)]">
+          Harmony {Math.round(game.harmony)}% · {game.placedCount} tiles placed · Biodiversity {bio.grade}
+        </p>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          {unlocked.length > 0 ? `New in the Atlas: ${unlocked.join(', ')}` : 'No new Atlas discoveries this run.'}
+        </p>
         <pre className="selectable mt-4 max-h-48 overflow-auto rounded-2xl bg-[var(--track)] p-3 text-sm leading-relaxed whitespace-pre-wrap">
           {share}
         </pre>
@@ -159,7 +179,7 @@ export function SummaryDialog({
                 })
               }}
             >
-              {pending ? 'Restoring…' : 'Restore +30% Harmony (Watch Short Video)'}
+              {pending ? 'Restoring…' : continueLabel}
             </button>
             {missed && <p className="mt-2 text-center text-xs text-[var(--muted)]">The video closed before the reward.</p>}
           </div>
@@ -321,6 +341,45 @@ export function ZenPassDialog({
           </div>
         )}
         {note && <p className="mt-3 text-sm text-[var(--muted)]">{note}</p>}
+      </div>
+    </Scrim>
+  )
+}
+
+export function AtlasDialog({
+  open,
+  discovered,
+  onClose,
+}: {
+  open: boolean
+  discovered: readonly string[]
+  onClose: () => void
+}) {
+  if (!open) return null
+  const known = new Set(discovered)
+  return (
+    <Scrim onClose={onClose} label="Hexora Atlas">
+      <div className="w-[min(40rem,calc(100vw-2rem))] p-5 sm:p-7">
+        <Header title="Hexora Atlas" onClose={onClose} />
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          {known.size} of {ATLAS.length} formations kept on this device. A first discovery stays, even after a new mosaic.
+        </p>
+        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          {ATLAS.map((card) => {
+            const found = known.has(card.id)
+            return (
+              <article
+                key={card.id}
+                className="rounded-2xl border border-[var(--line)] px-3 py-3"
+                style={{ opacity: found ? 1 : 0.55 }}
+              >
+                <p className="text-[10px] tracking-[0.16em] text-[var(--muted)] uppercase">{found ? 'Discovered' : 'Hidden'}</p>
+                <h3 className="mt-1 text-base font-medium">{found ? card.name : 'Undiscovered'}</h3>
+                <p className="mt-1 text-sm text-[var(--muted)]">{found ? card.blurb : 'Place the land in a rare shape to reveal this card.'}</p>
+              </article>
+            )
+          })}
+        </div>
       </div>
     </Scrim>
   )
